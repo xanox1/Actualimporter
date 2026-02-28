@@ -112,11 +112,43 @@ function extractAccountList(payload) {
   return [];
 }
 
+function extractBudgetList(payload) {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (Array.isArray(payload?.budgets)) {
+    return payload.budgets;
+  }
+
+  if (Array.isArray(payload?.data?.budgets)) {
+    return payload.data.budgets;
+  }
+
+  if (Array.isArray(payload?.data)) {
+    return payload.data;
+  }
+
+  if (Array.isArray(payload?.results)) {
+    return payload.results;
+  }
+
+  return [];
+}
+
 function shapeAccount(account) {
   return {
     id: String(account.id ?? account.uuid ?? account.accountId ?? ''),
     name: String(account.name ?? account.accountName ?? 'Onbekende rekening'),
     raw: account
+  };
+}
+
+function shapeBudget(budget) {
+  return {
+    id: String(budget.id ?? budget.uuid ?? budget.budgetId ?? ''),
+    name: String(budget.name ?? budget.budgetName ?? 'Onbekend budget'),
+    raw: budget
   };
 }
 
@@ -204,6 +236,60 @@ app.post('/api/actual/accounts', async (req, res) => {
       details: error.message
     });
   }
+});
+
+app.post('/api/actual/budgets', async (req, res) => {
+  const serverUrl = (req.body?.serverUrl || process.env.ACTUAL_SERVER_URL || '').trim();
+  const password = req.body?.password || process.env.ACTUAL_PASSWORD || '';
+
+  if (process.env.MOCK_ACTUAL === 'true') {
+    res.json({
+      budgets: [
+        { id: 'budget-main', name: 'Main Budget' },
+        { id: 'budget-personal', name: 'Personal Budget' }
+      ]
+    });
+    return;
+  }
+
+  if (!serverUrl) {
+    res.status(400).json({ error: 'ACTUAL_SERVER_URL ontbreekt.' });
+    return;
+  }
+
+  const configuredEndpoint = process.env.ACTUAL_BUDGETS_ENDPOINT;
+  const candidateEndpoints = configuredEndpoint
+    ? [configuredEndpoint]
+    : ['/api/budgets', '/api/list-budgets'];
+
+  for (const endpoint of candidateEndpoints) {
+    try {
+      const response = await fetch(`${serverUrl.replace(/\/$/, '')}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ password })
+      });
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const payload = await response.json();
+      const budgets = extractBudgetList(payload).map(shapeBudget).filter((budget) => budget.id);
+
+      res.json({ budgets, endpoint });
+      return;
+    } catch (_error) {
+      continue;
+    }
+  }
+
+  res.status(502).json({
+    error: 'Kon budget IDs niet ophalen bij Actual API.',
+    details: `Geprobeerd op endpoints: ${candidateEndpoints.join(', ')}`
+  });
 });
 
 app.post('/api/import', async (req, res) => {

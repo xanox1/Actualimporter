@@ -64,6 +64,7 @@ export default function App() {
   const [groupByColumn, setGroupByColumn] = useState('');
   const [accountMapping, setAccountMapping] = useState({});
   const [accounts, setAccounts] = useState([]);
+  const [budgets, setBudgets] = useState([]);
   const [actualConfig, setActualConfig] = useState({
     serverUrl: '',
     password: '',
@@ -74,6 +75,7 @@ export default function App() {
   const [importResult, setImportResult] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [loadingBudgets, setLoadingBudgets] = useState(false);
   const [loadingImport, setLoadingImport] = useState(false);
 
   const groups = useMemo(() => groupKeys(rows, groupByColumn), [rows, groupByColumn]);
@@ -158,6 +160,37 @@ export default function App() {
       setMessage(error.message);
     } finally {
       setLoadingAccounts(false);
+    }
+  }
+
+  async function loadBudgets() {
+    setLoadingBudgets(true);
+    setMessage('Budget IDs ophalen van Actual server...');
+
+    try {
+      const response = await fetch('/api/actual/budgets', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(actualConfig)
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || payload.details || 'Budget IDs ophalen mislukt.');
+      }
+
+      const nextBudgets = payload.budgets || [];
+      setBudgets(nextBudgets);
+
+      if (!actualConfig.budgetId && nextBudgets.length === 1) {
+        setActualConfig((prev) => ({ ...prev, budgetId: nextBudgets[0].id }));
+      }
+
+      setMessage(`Budget IDs geladen: ${nextBudgets.length}`);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setLoadingBudgets(false);
     }
   }
 
@@ -372,10 +405,32 @@ export default function App() {
         </div>
 
         <div className="row">
+          <button type="button" onClick={loadBudgets} disabled={loadingBudgets}>
+            {loadingBudgets ? 'Bezig...' : 'Haal budget IDs op'}
+          </button>
           <button type="button" onClick={loadAccounts} disabled={loadingAccounts}>
             {loadingAccounts ? 'Bezig...' : 'Haal accounts op'}
           </button>
         </div>
+
+        {budgets.length > 0 && (
+          <label>
+            Beschikbare budget IDs
+            <select
+              value={actualConfig.budgetId}
+              onChange={(event) =>
+                setActualConfig((prev) => ({ ...prev, budgetId: event.target.value }))
+              }
+            >
+              <option value="">-- Kies budget --</option>
+              {budgets.map((budget) => (
+                <option key={budget.id} value={budget.id}>
+                  {budget.name} ({budget.id})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {groups.length > 0 && (
           <div className="group-mapping">

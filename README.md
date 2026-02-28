@@ -79,6 +79,7 @@ docker run --rm -p 3000:3000 \
   -e ACTUAL_SERVER_URL="https://actual.example.com" \
   -e ACTUAL_PASSWORD="***" \
   -e ACTUAL_BUDGET_ID="***" \
+  -e ACTUAL_BUDGETS_ENDPOINT="/api/budgets" \
   -e ACTUAL_ACCOUNTS_ENDPOINT="/api/accounts" \
   -e ACTUAL_IMPORT_ENDPOINT="/api/import-transactions" \
   actualimporter:latest
@@ -97,6 +98,7 @@ docker compose up --build
 - `ACTUAL_SERVER_URL` - URL of your Actual server
 - `ACTUAL_PASSWORD` - Actual password/secret
 - `ACTUAL_BUDGET_ID` - budget identifier
+- `ACTUAL_BUDGETS_ENDPOINT` - optional budget listing path (when omitted, app tries `/api/budgets` then `/api/list-budgets`)
 - `ACTUAL_ACCOUNTS_ENDPOINT` - account listing path on Actual (default `/api/accounts`)
 - `ACTUAL_IMPORT_ENDPOINT` - transaction import path on Actual (default `/api/import-transactions`)
 - `MOCK_ACTUAL` - set `true` to test UI flow without real Actual API calls
