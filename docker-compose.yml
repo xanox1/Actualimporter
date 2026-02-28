@@ -1,5 +1,6 @@
 services:
   actualimporter:
+    image: actualimporter:latest
     build: .
     ports:
       - "3000:3000"
@@ -8,6 +9,4 @@ services:
       ACTUAL_SERVER_URL: ${ACTUAL_SERVER_URL:-}
       ACTUAL_PASSWORD: ${ACTUAL_PASSWORD:-}
       ACTUAL_BUDGET_ID: ${ACTUAL_BUDGET_ID:-}
-      ACTUAL_ACCOUNTS_ENDPOINT: ${ACTUAL_ACCOUNTS_ENDPOINT:-/api/accounts}
-      ACTUAL_IMPORT_ENDPOINT: ${ACTUAL_IMPORT_ENDPOINT:-/api/import-transactions}
       MOCK_ACTUAL: ${MOCK_ACTUAL:-false}

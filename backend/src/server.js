@@ -113,24 +113,12 @@ function extractAccountList(payload) {
 }
 
 function extractBudgetList(payload) {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
   if (Array.isArray(payload?.budgets)) {
     return payload.budgets;
   }
 
   if (Array.isArray(payload?.data?.budgets)) {
     return payload.data.budgets;
-  }
-
-  if (Array.isArray(payload?.data)) {
-    return payload.data;
-  }
-
-  if (Array.isArray(payload?.results)) {
-    return payload.results;
   }
 
   return [];
@@ -209,8 +197,7 @@ app.post('/api/actual/accounts', async (req, res) => {
   }
 
   try {
-    const endpoint = process.env.ACTUAL_ACCOUNTS_ENDPOINT || '/api/accounts';
-    const response = await fetch(`${serverUrl.replace(/\/$/, '')}${endpoint}`, {
+    const response = await fetch(`${serverUrl.replace(/\/$/, '')}/api/accounts`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json'
@@ -257,39 +244,30 @@ app.post('/api/actual/budgets', async (req, res) => {
     return;
   }
 
-  const configuredEndpoint = process.env.ACTUAL_BUDGETS_ENDPOINT;
-  const candidateEndpoints = configuredEndpoint
-    ? [configuredEndpoint]
-    : ['/api/budgets', '/api/list-budgets'];
+  try {
+    const response = await fetch(`${serverUrl.replace(/\/$/, '')}/api/budgets`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ password })
+    });
 
-  for (const endpoint of candidateEndpoints) {
-    try {
-      const response = await fetch(`${serverUrl.replace(/\/$/, '')}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json'
-        },
-        body: JSON.stringify({ password })
-      });
-
-      if (!response.ok) {
-        continue;
-      }
-
-      const payload = await response.json();
-      const budgets = extractBudgetList(payload).map(shapeBudget).filter((budget) => budget.id);
-
-      res.json({ budgets, endpoint });
-      return;
-    } catch (_error) {
-      continue;
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Actual API fout (${response.status}): ${detail}`);
     }
-  }
 
-  res.status(502).json({
-    error: 'Kon budget IDs niet ophalen bij Actual API.',
-    details: `Geprobeerd op endpoints: ${candidateEndpoints.join(', ')}`
-  });
+    const payload = await response.json();
+    const budgets = extractBudgetList(payload).map(shapeBudget).filter((budget) => budget.id);
+
+    res.json({ budgets });
+  } catch (error) {
+    res.status(502).json({
+      error: 'Kon budget IDs niet ophalen bij Actual API.',
+      details: error.message
+    });
+  }
 });
 
 app.post('/api/import', async (req, res) => {
@@ -318,8 +296,7 @@ app.post('/api/import', async (req, res) => {
       date: row.date,
       payee: row.payee,
       notes: row.notes,
-      amount: parseAmount(row.amount),
-      reference: row.reference
+      amount: parseAmount(row.amount)
     }));
 
     const invalidCount = normalized.filter((row) => row.amount === null || !row.date).length;
@@ -350,9 +327,7 @@ app.post('/api/import', async (req, res) => {
       return;
     }
 
-    const endpoint = process.env.ACTUAL_IMPORT_ENDPOINT || '/api/import-transactions';
-
-    const response = await fetch(`${serverUrl.replace(/\/$/, '')}${endpoint}`, {
+    const response = await fetch(`${serverUrl.replace(/\/$/, '')}/api/import-transactions`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json'

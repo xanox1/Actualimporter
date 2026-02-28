@@ -7,7 +7,7 @@ Reference API docs: https://actualbudget.org/docs/api/reference
 ## What is implemented (MVP)
 
 - CSV upload + preview in browser
-- Column assignment per target field (`date`, `amount`, `payee`, `notes`, `reference`)
+- Column assignment per target field (`date`, `amount`, `payee`, `notes`)
 - Column merge rules (many CSV columns into one target field)
 - Grouping and mapping to multiple Actual accounts
 - Account discovery endpoint integration (`/api/actual/accounts`)
@@ -79,9 +79,6 @@ docker run --rm -p 3000:3000 \
   -e ACTUAL_SERVER_URL="https://actual.example.com" \
   -e ACTUAL_PASSWORD="***" \
   -e ACTUAL_BUDGET_ID="***" \
-  -e ACTUAL_BUDGETS_ENDPOINT="/api/budgets" \
-  -e ACTUAL_ACCOUNTS_ENDPOINT="/api/accounts" \
-  -e ACTUAL_IMPORT_ENDPOINT="/api/import-transactions" \
   actualimporter:latest
 ```
 
@@ -89,7 +86,8 @@ Or with Compose:
 
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose build
+docker compose up -d
 ```
 
 ## Environment variables
@@ -98,18 +96,7 @@ docker compose up --build
 - `ACTUAL_SERVER_URL` - URL of your Actual server
 - `ACTUAL_PASSWORD` - Actual password/secret
 - `ACTUAL_BUDGET_ID` - budget identifier
-- `ACTUAL_BUDGETS_ENDPOINT` - optional budget listing path (when omitted, app tries `/api/budgets` then `/api/list-budgets`)
-- `ACTUAL_ACCOUNTS_ENDPOINT` - account listing path on Actual (default `/api/accounts`)
-- `ACTUAL_IMPORT_ENDPOINT` - transaction import path on Actual (default `/api/import-transactions`)
 - `MOCK_ACTUAL` - set `true` to test UI flow without real Actual API calls
-
-## Notes on Actual API compatibility
-
-Actual deployments can differ in endpoint shape depending on setup/version.
-
-- If account loading fails, adjust `ACTUAL_ACCOUNTS_ENDPOINT`.
-- If transaction import fails, adjust `ACTUAL_IMPORT_ENDPOINT`.
-- You can keep `dry-run` enabled to validate mapping safely before posting data.
 
 ## Safety
 

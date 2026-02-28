@@ -4,8 +4,7 @@ const TARGET_FIELDS = [
   { key: 'date', label: 'Datum' },
   { key: 'amount', label: 'Bedrag' },
   { key: 'payee', label: 'Tegenrekening / Payee' },
-  { key: 'notes', label: 'Omschrijving / Notes' },
-  { key: 'reference', label: 'Referentie' }
+  { key: 'notes', label: 'Omschrijving / Notes' }
 ];
 
 function getInitialRule(headers) {
