@@ -113,12 +113,20 @@ function extractAccountList(payload) {
 }
 
 function extractBudgetList(payload) {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
   if (Array.isArray(payload?.budgets)) {
     return payload.budgets;
   }
 
   if (Array.isArray(payload?.data?.budgets)) {
     return payload.data.budgets;
+  }
+
+  if (Array.isArray(payload?.data)) {
+    return payload.data;
   }
 
   return [];
@@ -193,6 +201,11 @@ app.post('/api/actual/accounts', async (req, res) => {
 
   if (!serverUrl) {
     res.status(400).json({ error: 'ACTUAL_SERVER_URL ontbreekt.' });
+    return;
+  }
+
+  if (!password) {
+    res.status(400).json({ error: 'ACTUAL_PASSWORD ontbreekt.' });
     return;
   }
 

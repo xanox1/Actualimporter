@@ -76,6 +76,10 @@ export default function App() {
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [loadingBudgets, setLoadingBudgets] = useState(false);
   const [loadingImport, setLoadingImport] = useState(false);
+  const canLoadAccounts =
+    Boolean(actualConfig.serverUrl.trim()) &&
+    Boolean(actualConfig.password) &&
+    Boolean(actualConfig.budgetId.trim());
 
   const groups = useMemo(() => groupKeys(rows, groupByColumn), [rows, groupByColumn]);
   const mappedPreview = useMemo(() => applyMapping(rows.slice(0, 10), mapping), [rows, mapping]);
@@ -183,9 +187,16 @@ export default function App() {
 
       if (!actualConfig.budgetId && nextBudgets.length === 1) {
         setActualConfig((prev) => ({ ...prev, budgetId: nextBudgets[0].id }));
+        setMessage(`1 budget ID geladen en automatisch geselecteerd: ${nextBudgets[0].id}`);
+        return;
       }
 
-      setMessage(`Budget IDs geladen: ${nextBudgets.length}`);
+      if (!nextBudgets.length) {
+        setMessage('Geen budget IDs ontvangen. Controleer server URL/wachtwoord en API-toegang.');
+        return;
+      }
+
+      setMessage(`Budget IDs geladen: ${nextBudgets.length}. Kies er één en haal daarna accounts op.`);
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -368,7 +379,7 @@ export default function App() {
       </section>
 
       <section className="card">
-        <h2>3) Actual accounts ophalen en koppelen</h2>
+        <h2>3) Actual budget en accounts koppelen</h2>
         <div className="grid3">
           <label>
             Actual server URL
@@ -379,16 +390,6 @@ export default function App() {
                 setActualConfig((prev) => ({ ...prev, serverUrl: event.target.value }))
               }
               placeholder="https://actual.example.com"
-            />
-          </label>
-          <label>
-            Budget ID
-            <input
-              type="text"
-              value={actualConfig.budgetId}
-              onChange={(event) =>
-                setActualConfig((prev) => ({ ...prev, budgetId: event.target.value }))
-              }
             />
           </label>
           <label>
@@ -405,16 +406,13 @@ export default function App() {
 
         <div className="row">
           <button type="button" onClick={loadBudgets} disabled={loadingBudgets}>
-            {loadingBudgets ? 'Bezig...' : 'Haal budget IDs op'}
-          </button>
-          <button type="button" onClick={loadAccounts} disabled={loadingAccounts}>
-            {loadingAccounts ? 'Bezig...' : 'Haal accounts op'}
+            {loadingBudgets ? 'Bezig...' : '1) Haal budget IDs op'}
           </button>
         </div>
 
         {budgets.length > 0 && (
           <label>
-            Beschikbare budget IDs
+            2) Kies budget ID
             <select
               value={actualConfig.budgetId}
               onChange={(event) =>
@@ -429,6 +427,29 @@ export default function App() {
               ))}
             </select>
           </label>
+        )}
+
+        <label>
+          Of vul Budget ID handmatig in
+          <input
+            type="text"
+            value={actualConfig.budgetId}
+            onChange={(event) =>
+              setActualConfig((prev) => ({ ...prev, budgetId: event.target.value }))
+            }
+          />
+        </label>
+
+        <div className="row">
+          <button type="button" onClick={loadAccounts} disabled={loadingAccounts || !canLoadAccounts}>
+            {loadingAccounts ? 'Bezig...' : '3) Haal accounts op'}
+          </button>
+        </div>
+
+        {!canLoadAccounts && (
+          <p className="info">
+            Vul server URL en wachtwoord in, haal budget IDs op en kies een budget (of vul handmatig in).
+          </p>
         )}
 
         {groups.length > 0 && (
