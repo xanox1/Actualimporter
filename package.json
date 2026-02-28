@@ -1,0 +1,14 @@
+{
+  "name": "actualimporter",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "build": "npm run build -w backend && npm run build -w frontend",
+    "dev": "npm run dev -w backend",
+    "start": "npm run start -w backend"
+  }
+}
