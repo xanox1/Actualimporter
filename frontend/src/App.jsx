@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const TARGET_FIELDS = [
   { key: 'date', label: 'Datum' },
@@ -54,6 +54,42 @@ function groupKeys(rows, groupByColumn) {
   return [...keys];
 }
 
+function parseApiMessage(payload, fallbackError, fallbackHint) {
+  const lines = [];
+
+  if (payload?.error) {
+    lines.push(payload.error);
+  } else if (fallbackError) {
+    lines.push(fallbackError);
+  }
+
+  if (payload?.details) {
+    lines.push(`Details: ${payload.details}`);
+  }
+
+  if (payload?.hint || fallbackHint) {
+    lines.push(`Tip: ${payload?.hint || fallbackHint}`);
+  }
+
+  return lines.filter(Boolean).join('\n');
+}
+
+function stringifyDebugValue(value) {
+  if (value === undefined) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch (_error) {
+    return String(value);
+  }
+}
+
 export default function App() {
   const [csvFile, setCsvFile] = useState(null);
   const [headers, setHeaders] = useState([]);
@@ -76,6 +112,8 @@ export default function App() {
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [loadingBudgets, setLoadingBudgets] = useState(false);
   const [loadingImport, setLoadingImport] = useState(false);
+  const [lastApiError, setLastApiError] = useState(null);
+  const [copyDebugStatus, setCopyDebugStatus] = useState('');
   const canLoadAccounts =
     Boolean(actualConfig.serverUrl.trim()) &&
     Boolean(actualConfig.password) &&
@@ -84,8 +122,81 @@ export default function App() {
   const groups = useMemo(() => groupKeys(rows, groupByColumn), [rows, groupByColumn]);
   const mappedPreview = useMemo(() => applyMapping(rows.slice(0, 10), mapping), [rows, mapping]);
 
+  useEffect(() => {
+    setCopyDebugStatus('');
+  }, [lastApiError]);
+
   function onCsvFileChange(event) {
     setCsvFile(event.target.files?.[0] || null);
+  }
+
+  async function copyTextToClipboard(text) {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.setAttribute('readonly', '');
+        textArea.style.position = 'absolute';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+
+      setCopyDebugStatus('Details gekopieerd naar klembord.');
+      return true;
+    } catch (_error) {
+      setCopyDebugStatus('Kopiëren mislukt. Kopieer de tekst handmatig uit dit paneel.');
+      return false;
+    }
+  }
+
+  function debugAsText() {
+    if (!lastApiError) {
+      return '';
+    }
+
+    const lines = [
+      `Actie: ${lastApiError.action || '-'}`,
+      `Endpoint: ${lastApiError.endpoint || '-'}`,
+      `Status: ${lastApiError.status || '-'} ${lastApiError.statusText || ''}`.trim()
+    ];
+
+    if (lastApiError.reason) {
+      lines.push(`Reden: ${lastApiError.reason}`);
+    }
+
+    if (lastApiError.networkError) {
+      lines.push(`Netwerkfout: ${lastApiError.networkError}`);
+    }
+
+    if (lastApiError.responsePayload !== undefined) {
+      lines.push('Response payload:');
+      lines.push(stringifyDebugValue(lastApiError.responsePayload));
+    }
+
+    return lines.join('\n');
+  }
+
+  async function copyDebugAsText() {
+    if (!lastApiError) {
+      return;
+    }
+
+    const text = debugAsText();
+    await copyTextToClipboard(text);
+  }
+
+  async function copyDebugAsJson() {
+    if (!lastApiError) {
+      return;
+    }
+
+    const json = stringifyDebugValue(lastApiError);
+    await copyTextToClipboard(json);
   }
 
   async function uploadCsv(event) {
@@ -98,6 +209,7 @@ export default function App() {
     setLoadingPreview(true);
     setMessage('CSV wordt geanalyseerd...');
     setImportResult(null);
+    setLastApiError(null);
 
     try {
       const formData = new FormData();
@@ -110,6 +222,13 @@ export default function App() {
       const payload = await response.json();
 
       if (!response.ok) {
+        setLastApiError({
+          action: 'csv-preview',
+          endpoint: '/api/csv/preview',
+          status: response.status,
+          statusText: response.statusText,
+          responsePayload: payload
+        });
         throw new Error(payload.error || 'CSV upload mislukt.');
       }
 
@@ -124,7 +243,15 @@ export default function App() {
       setMapping(nextMapping);
 
       setMessage(`CSV geladen: ${payload.rowCount || 0} rijen, delimiter '${payload.delimiter}'.`);
+      setLastApiError(null);
     } catch (error) {
+      if (!lastApiError) {
+        setLastApiError({
+          action: 'csv-preview',
+          endpoint: '/api/csv/preview',
+          networkError: error.message
+        });
+      }
       setMessage(error.message);
     } finally {
       setLoadingPreview(false);
@@ -142,8 +269,24 @@ export default function App() {
   }
 
   async function loadAccounts() {
+    if (!actualConfig.serverUrl.trim()) {
+      setMessage('ACTUAL_SERVER_URL ontbreekt.\nTip: Vul de server URL in bij stap 3.');
+      return;
+    }
+
+    if (!actualConfig.password) {
+      setMessage('ACTUAL_PASSWORD ontbreekt.\nTip: Vul het wachtwoord in bij stap 3.');
+      return;
+    }
+
+    if (!actualConfig.budgetId.trim()) {
+      setMessage('ACTUAL_BUDGET_ID ontbreekt.\nTip: Haal eerst budget IDs op en kies een budget.');
+      return;
+    }
+
     setLoadingAccounts(true);
     setMessage('Rekeningen ophalen van Actual server...');
+    setLastApiError(null);
 
     try {
       const response = await fetch('/api/actual/accounts', {
@@ -151,24 +294,61 @@ export default function App() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(actualConfig)
       });
-      const payload = await response.json();
+      const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(payload.error || payload.details || 'Rekeningen ophalen mislukt.');
+        setLastApiError({
+          action: 'load-accounts',
+          endpoint: '/api/actual/accounts',
+          status: response.status,
+          statusText: response.statusText,
+          responsePayload: payload
+        });
+        setMessage(
+          parseApiMessage(
+            payload,
+            'Rekeningen ophalen mislukt.',
+            'Controleer server URL, wachtwoord en budget ID.'
+          )
+        );
+        return;
       }
 
       setAccounts(payload.accounts || []);
       setMessage(`Rekeningen geladen: ${(payload.accounts || []).length}`);
+      setLastApiError(null);
     } catch (error) {
-      setMessage(error.message);
+      setLastApiError({
+        action: 'load-accounts',
+        endpoint: '/api/actual/accounts',
+        networkError: error.message
+      });
+      setMessage(
+        parseApiMessage(
+          null,
+          `Netwerkfout tijdens rekeningen ophalen: ${error.message}`,
+          'Controleer of de backend draait en dat de server URL bereikbaar is.'
+        )
+      );
     } finally {
       setLoadingAccounts(false);
     }
   }
 
   async function loadBudgets() {
+    if (!actualConfig.serverUrl.trim()) {
+      setMessage('ACTUAL_SERVER_URL ontbreekt.\nTip: Vul de server URL in bij stap 3.');
+      return;
+    }
+
+    if (!actualConfig.password) {
+      setMessage('ACTUAL_PASSWORD ontbreekt.\nTip: Vul het wachtwoord in bij stap 3.');
+      return;
+    }
+
     setLoadingBudgets(true);
     setMessage('Budget IDs ophalen van Actual server...');
+    setLastApiError(null);
 
     try {
       const response = await fetch('/api/actual/budgets', {
@@ -176,10 +356,24 @@ export default function App() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(actualConfig)
       });
-      const payload = await response.json();
+      const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(payload.error || payload.details || 'Budget IDs ophalen mislukt.');
+        setLastApiError({
+          action: 'load-budgets',
+          endpoint: '/api/actual/budgets',
+          status: response.status,
+          statusText: response.statusText,
+          responsePayload: payload
+        });
+        setMessage(
+          parseApiMessage(
+            payload,
+            'Budget IDs ophalen mislukt.',
+            'Controleer server URL/wachtwoord en of /api/budgets beschikbaar is.'
+          )
+        );
+        return;
       }
 
       const nextBudgets = payload.budgets || [];
@@ -192,13 +386,35 @@ export default function App() {
       }
 
       if (!nextBudgets.length) {
-        setMessage('Geen budget IDs ontvangen. Controleer server URL/wachtwoord en API-toegang.');
+        setLastApiError({
+          action: 'load-budgets',
+          endpoint: '/api/actual/budgets',
+          status: response.status,
+          statusText: response.statusText,
+          responsePayload: payload,
+          reason: 'No budgets returned'
+        });
+        setMessage(
+          'Geen budget IDs ontvangen van de API.\nTip: Controleer of dit account toegang heeft tot budgetten.'
+        );
         return;
       }
 
       setMessage(`Budget IDs geladen: ${nextBudgets.length}. Kies er één en haal daarna accounts op.`);
+      setLastApiError(null);
     } catch (error) {
-      setMessage(error.message);
+      setLastApiError({
+        action: 'load-budgets',
+        endpoint: '/api/actual/budgets',
+        networkError: error.message
+      });
+      setMessage(
+        parseApiMessage(
+          null,
+          `Netwerkfout tijdens budget IDs ophalen: ${error.message}`,
+          'Controleer of de backend draait en dat de server URL bereikbaar is.'
+        )
+      );
     } finally {
       setLoadingBudgets(false);
     }
@@ -212,6 +428,7 @@ export default function App() {
 
     setLoadingImport(true);
     setMessage(dryRun ? 'Dry-run validatie gestart...' : 'Import gestart...');
+    setLastApiError(null);
 
     try {
       const response = await fetch('/api/import', {
@@ -226,16 +443,42 @@ export default function App() {
           actualConfig
         })
       });
-      const payload = await response.json();
+      const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(payload.error || payload.details || 'Import mislukt.');
+        setLastApiError({
+          action: 'run-import',
+          endpoint: '/api/import',
+          status: response.status,
+          statusText: response.statusText,
+          responsePayload: payload
+        });
+        setMessage(
+          parseApiMessage(
+            payload,
+            'Import mislukt.',
+            'Controleer mapping, account-koppeling en Actual configuratie.'
+          )
+        );
+        return;
       }
 
       setImportResult(payload);
       setMessage(dryRun ? 'Dry-run afgerond.' : 'Import afgerond.');
+      setLastApiError(null);
     } catch (error) {
-      setMessage(error.message);
+      setLastApiError({
+        action: 'run-import',
+        endpoint: '/api/import',
+        networkError: error.message
+      });
+      setMessage(
+        parseApiMessage(
+          null,
+          `Netwerkfout tijdens import: ${error.message}`,
+          'Controleer of de backend draait en probeer opnieuw.'
+        )
+      );
     } finally {
       setLoadingImport(false);
     }
@@ -519,6 +762,21 @@ export default function App() {
       </section>
 
       {message && <p className="status">{message}</p>}
+      {lastApiError && (
+        <details className="debug-panel">
+          <summary>Toon technische foutdetails</summary>
+          <div className="row debug-actions">
+            <button type="button" onClick={copyDebugAsText}>
+              Kopieer als tekst
+            </button>
+            <button type="button" onClick={copyDebugAsJson}>
+              Kopieer als JSON
+            </button>
+            {copyDebugStatus && <span className="info">{copyDebugStatus}</span>}
+          </div>
+          <pre>{stringifyDebugValue(lastApiError)}</pre>
+        </details>
+      )}
     </main>
   );
 }

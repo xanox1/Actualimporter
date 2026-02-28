@@ -148,6 +148,28 @@ function shapeBudget(budget) {
   };
 }
 
+async function readActualErrorDetail(response) {
+  const contentType = response.headers.get('content-type') || '';
+
+  try {
+    if (contentType.includes('application/json')) {
+      const payload = await response.json();
+      if (typeof payload?.error === 'string' && payload.error) {
+        return payload.error;
+      }
+      if (typeof payload?.message === 'string' && payload.message) {
+        return payload.message;
+      }
+      return JSON.stringify(payload).slice(0, 500);
+    }
+
+    const text = await response.text();
+    return text.slice(0, 500);
+  } catch (_error) {
+    return 'Geen foutdetails beschikbaar.';
+  }
+}
+
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
@@ -200,12 +222,26 @@ app.post('/api/actual/accounts', async (req, res) => {
   }
 
   if (!serverUrl) {
-    res.status(400).json({ error: 'ACTUAL_SERVER_URL ontbreekt.' });
+    res.status(400).json({
+      error: 'ACTUAL_SERVER_URL ontbreekt.',
+      hint: 'Vul de server URL in, bijvoorbeeld https://actual.example.com.'
+    });
     return;
   }
 
   if (!password) {
-    res.status(400).json({ error: 'ACTUAL_PASSWORD ontbreekt.' });
+    res.status(400).json({
+      error: 'ACTUAL_PASSWORD ontbreekt.',
+      hint: 'Vul het wachtwoord van je Actual server in.'
+    });
+    return;
+  }
+
+  if (!budgetId) {
+    res.status(400).json({
+      error: 'ACTUAL_BUDGET_ID ontbreekt.',
+      hint: 'Haal eerst budget IDs op en kies een budget ID.'
+    });
     return;
   }
 
@@ -222,8 +258,8 @@ app.post('/api/actual/accounts', async (req, res) => {
     });
 
     if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Actual API fout (${response.status}): ${detail}`);
+      const detail = await readActualErrorDetail(response);
+      throw new Error(`Endpoint /api/accounts gaf status ${response.status}. ${detail}`);
     }
 
     const payload = await response.json();
@@ -233,7 +269,8 @@ app.post('/api/actual/accounts', async (req, res) => {
   } catch (error) {
     res.status(502).json({
       error: 'Kon rekeningen niet ophalen bij Actual API.',
-      details: error.message
+      details: error.message,
+      hint: 'Controleer server URL, wachtwoord en budget ID. Test eerst budget IDs ophalen.'
     });
   }
 });
@@ -253,7 +290,18 @@ app.post('/api/actual/budgets', async (req, res) => {
   }
 
   if (!serverUrl) {
-    res.status(400).json({ error: 'ACTUAL_SERVER_URL ontbreekt.' });
+    res.status(400).json({
+      error: 'ACTUAL_SERVER_URL ontbreekt.',
+      hint: 'Vul de server URL in, bijvoorbeeld https://actual.example.com.'
+    });
+    return;
+  }
+
+  if (!password) {
+    res.status(400).json({
+      error: 'ACTUAL_PASSWORD ontbreekt.',
+      hint: 'Vul het wachtwoord van je Actual server in.'
+    });
     return;
   }
 
@@ -267,8 +315,8 @@ app.post('/api/actual/budgets', async (req, res) => {
     });
 
     if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Actual API fout (${response.status}): ${detail}`);
+      const detail = await readActualErrorDetail(response);
+      throw new Error(`Endpoint /api/budgets gaf status ${response.status}. ${detail}`);
     }
 
     const payload = await response.json();
@@ -278,7 +326,8 @@ app.post('/api/actual/budgets', async (req, res) => {
   } catch (error) {
     res.status(502).json({
       error: 'Kon budget IDs niet ophalen bij Actual API.',
-      details: error.message
+      details: error.message,
+      hint: 'Controleer server URL en wachtwoord, en of jouw Actual API endpoint /api/budgets ondersteunt.'
     });
   }
 });
@@ -331,7 +380,26 @@ app.post('/api/import', async (req, res) => {
     const budgetId = actualConfig?.budgetId || process.env.ACTUAL_BUDGET_ID || '';
 
     if (!serverUrl) {
-      res.status(400).json({ error: 'ACTUAL_SERVER_URL ontbreekt voor import.' });
+      res.status(400).json({
+        error: 'ACTUAL_SERVER_URL ontbreekt voor import.',
+        hint: 'Vul de server URL in bij stap 3.'
+      });
+      return;
+    }
+
+    if (!password) {
+      res.status(400).json({
+        error: 'ACTUAL_PASSWORD ontbreekt voor import.',
+        hint: 'Vul het wachtwoord in bij stap 3.'
+      });
+      return;
+    }
+
+    if (!budgetId) {
+      res.status(400).json({
+        error: 'ACTUAL_BUDGET_ID ontbreekt voor import.',
+        hint: 'Kies eerst een budget ID via "Haal budget IDs op".'
+      });
       return;
     }
 
@@ -354,10 +422,11 @@ app.post('/api/import', async (req, res) => {
     });
 
     if (!response.ok) {
-      const detail = await response.text();
+      const detail = await readActualErrorDetail(response);
       res.status(502).json({
         error: `Import naar Actual mislukt voor groep '${group}'.`,
-        details: detail
+        details: `Endpoint /api/import-transactions gaf status ${response.status}. ${detail}`,
+        hint: 'Controleer of account mapping klopt en of de transactiedata geldig is.'
       });
       return;
     }

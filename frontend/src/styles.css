@@ -141,4 +141,28 @@ th {
   background: #1d2533;
   border-radius: 8px;
   padding: 0.8rem;
+  white-space: pre-line;
+}
+
+.debug-panel {
+  margin-top: 0.75rem;
+  border: 1px solid #384458;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  background: #131a24;
+}
+
+.debug-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.debug-actions {
+  margin-top: 0.65rem;
+}
+
+.debug-panel pre {
+  margin: 0.75rem 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
